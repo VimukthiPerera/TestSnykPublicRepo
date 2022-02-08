@@ -1,0 +1,132 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflows_logic_app_check_diagnostic_logs_name": {
+            "defaultValue": "logic-app-check-diagnostic-logs",
+            "type": "string"
+        },
+        "connections_azuremonitorlogs_externalid": {
+            "defaultValue": "/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/azuremonitorlogs",
+            "type": "string"
+        },
+        "connections_gmail_externalid": {
+            "defaultValue": "/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/gmail",
+            "type": "string"
+        },
+        "location": {
+            "type": "string"
+        },
+        "resourceGroup": {
+            "type": "string"
+        },
+        "logAnalyticsWorkspaceName":{
+            "type": "string"
+        },
+        "subscriptionId":{
+            "type": "string"
+        },
+        "resourceTags": {
+            "type": "object"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2019-05-01",
+            "name": "[parameters('workflows_logic_app_check_diagnostic_logs_name')]",
+            "location": "[parameters('location')]",
+            "tags": "[parameters('resourceTags')]",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Day",
+                                "interval": 1
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "For_each": {
+                            "foreach": "@body('Run_query_and_list_results')?['value']",
+                            "actions": {
+                                "Send_email_(V2)": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "body": {
+                                            "Body": "<p>Hello SOC,<br>\nPlease note that we have observed a delay on Azure Diagnostics logs from following Resource_IDs for the past 24 hours when they compared to last 7 days. There are no logs found for last 24 hours, so we recommend you to investigate this further and take necessary actions.<br>\n<br>\nResource IDs-<br>\n@{items('For_each')?['MissingCategories_1']}<br>\n@{items('For_each')?['MissingCategories_2']}<br>\n@{items('For_each')?['MissingCategories_3']}<br>\n@{items('For_each')?['MissingCategories_4']}<br>\n@{items('For_each')?['MissingCategories_5']}<br>\n@{items('For_each')?['MissingCategories_6']}<br>\n@{items('For_each')?['MissingCategories_7']}<br>\n@{items('For_each')?['MissingCategories_8']}<br>\n@{items('For_each')?['MissingCategories_9']}<br>\n@{items('For_each')?['MissingCategories_10']}<br>\n@{items('For_each')?['MissingCategories_11']}<br>\n@{items('For_each')?['MissingCategories_12']}<br>\n@{items('For_each')?['MissingCategories_12']}<br>\n@{items('For_each')?['MissingCategories_13']}<br>\n@{items('For_each')?['MissingCategories_14']}<br>\n@{items('For_each')?['MissingCategories_15']}<br>\n@{items('For_each')?['MissingCategories_16']}<br>\n@{items('For_each')?['MissingCategories_17']}<br>\n@{items('For_each')?['MissingCategories_18']}<br>\n@{items('For_each')?['MissingCategories_19']}<br>\n@{items('For_each')?['MissingCategories_20']}<br>\n<br>\n<br>\n-WSO2 Cloud Security Alerts-</p>",
+                                            "Subject": "[Sentinel-LogDelay] Azure Diagnostics logs failing - High ",
+                                            "To": "azure-sec-alerts@wso2.com"
+                                        },
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['gmail']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "path": "/v2/Mail"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Run_query_and_list_results": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Run_query_and_list_results": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": "// Get the time now\nlet dt = now();\n// Get time window before 7 days ago as start time\nlet startTime_prev = dt-7d;\n// Get time window before 1 days ago, 1 sec back to the current second value, as the end time. This will check the logs for past 7 days\nlet endTime_prev = dt-1d - 1sec;\n// Get time window before 1 days ago period for check the difference to previous 7 days ago time window\nlet startTime = dt-1d;\n// Get the curent time - 1 sec time to check the difference to previous 7 days ago time window\nlet endTime = startTime + 1d - 1sec;\nAzureDiagnostics\n| where _ResourceId !contains \"logic-securityeventsemail\"\n| where TimeGenerated between (startTime_prev .. endTime_prev)\n| project TimeGenerated, Category, _SubscriptionId, _ResourceId\n| summarize Count01 = count() by _ResourceId\n| join kind= fullouter (\n    AzureDiagnostics\n    | where TimeGenerated between (startTime .. endTime)\n    | where _ResourceId !contains \"logic-securityeventsemail\"\n    | project TimeGenerated, Category, _SubscriptionId, _ResourceId\n    | summarize Count02 = count() by _ResourceId\n    )\n    on _ResourceId\n    | extend Difference = Count01 - Count02\n    | extend Diff = strcmp(_ResourceId,_ResourceId1)\n    | summarize MissingCategories = make_set_if(_ResourceId,Diff == 1)\n    | project MissingCategories[1],MissingCategories[2],MissingCategories[3],MissingCategories[4],MissingCategories[5],MissingCategories[6],MissingCategories[7],MissingCategories[8],MissingCategories[9],MissingCategories[10],MissingCategories[11],MissingCategories[12],MissingCategories[13],MissingCategories[14],MissingCategories[15],MissingCategories[16],MissingCategories[17],MissingCategories[18],MissingCategories[19],MissingCategories[20]\n",
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuremonitorlogs']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/queryData",
+                                "queries": {
+                                    "resourcegroups": "[parameters('resourceGroup')]",
+                                    "resourcename": "[parameters('logAnalyticsWorkspaceName')]",
+                                    "resourcetype": "Log Analytics Workspace",
+                                    "subscriptions": "[parameters('subscriptionId')]",
+                                    "timerange": "Set in query"
+                                }
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuremonitorlogs": {
+                                "connectionId": "[parameters('connections_azuremonitorlogs_externalid')]",
+                                "connectionName": "azuremonitorlogs",
+                                "id": "/subscriptions/[parameters('subscriptionId')]/providers/Microsoft.Web/locations/[parameters('location')]/managedApis/azuremonitorlogs"
+                            },
+                            "gmail": {
+                                "connectionId": "[parameters('connections_gmail_externalid')]",
+                                "connectionName": "gmail",
+                                "id": "/subscriptions/[parameters('subscriptionId')]/providers/Microsoft.Web/locations/[parameters('location')]/managedApis/gmail"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

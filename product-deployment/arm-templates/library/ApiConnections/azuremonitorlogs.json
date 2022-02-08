@@ -1,0 +1,51 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "connections_azuremonitorlogs_name": {
+            "defaultValue": "azuremonitorlogs",
+            "type": "string"
+        },
+        "location": {
+            "type": "string"
+        },
+        "resourceTags": {
+            "type": "object"
+        },
+        "tenantId": {
+            "type": "string"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2018-07-01-preview",
+            "name": "[parameters('connections_azuremonitorlogs_name')]",
+            "location": "[parameters('location')]",
+            "tags": "[parameters('resourceTags')]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "azuremonitorlogs",
+                "statuses": [
+                    {
+                        "status": "Connected"
+                    }
+                ],
+                "nonSecretParameterValues": {
+                    "token:TenantId": "[parameters('tenantId')]",
+                    "token:grantType": "code"
+                },
+                "api": {
+                    "name": "[parameters('connections_azuremonitorlogs_name')]",
+                    "displayName": "Azure Monitor Logs",
+                    "description": "Use this connector to query your Azure Monitor Logs across Log Analytics workspace and Application Insights component, to list or visualize results.",
+                    "iconUri": "[concat('https://connectoricons-prod.azureedge.net/releases/v1.0.1501/1.0.1501.2507/', parameters('connections_azuremonitorlogs_name'), '/icon.png')]",
+                    "brandColor": "#0072C6",
+                    "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('location'), parameters('connections_azuremonitorlogs_name'))]",
+                    "type": "Microsoft.Web/locations/managedApis"
+                }
+            }
+        }
+    ]
+}

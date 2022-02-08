@@ -1,0 +1,56 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "connections_service_now_name": {
+            "defaultValue": "service-now",
+            "type": "string"
+        },
+        "location": {
+            "type": "string"
+        },
+        "resourceTags": {
+            "type": "object"
+        },
+        "snowRequestURI":{
+            "type": "string"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2018-07-01-preview",
+            "name": "[parameters('connections_service_now_name')]",
+            "location": "[parameters('location')]",
+            "tags": "[parameters('resourceTags')]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "SNOW-DEV",
+                "statuses": [
+                    {
+                        "status": "Connected"
+                    }
+                ],
+                "nonSecretParameterValues": {
+                    "instance": "[concat('https://wso2sndev.', parameters('connections_service_now_name'), '.com')]",
+                    "username": "sentineluser"
+                },
+                "api": {
+                    "name": "[parameters('connections_service_now_name')]",
+                    "displayName": "ServiceNow",
+                    "description": "ServiceNow improves service levels, energizes employees, and enables your enterprise to work at lightspeed. Create, read and update records stored within ServiceNow including Incidents, Questions, Users and more.",
+                    "iconUri": "[concat('https://connectoricons-prod.azureedge.net/releases/v1.0.1467/1.0.1467.2416/', parameters('connections_service_now_name'), '/icon.png')]",
+                    "brandColor": "#D1232B",
+                    "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('location'),  parameters('connections_service_now_name'))]",
+                    "type": "Microsoft.Web/locations/managedApis"
+                },
+                "testLinks": [
+                    {
+                        "requestUri": "[concat(parameters('snowRequestURI'), parameters('connections_service_now_name'), '/extensions/proxy/api/now/doc/table/schema?api-version=2016-06-01')]",
+                        "method": "get"
+                    }
+                ]
+            }
+        }
+    ]
+}

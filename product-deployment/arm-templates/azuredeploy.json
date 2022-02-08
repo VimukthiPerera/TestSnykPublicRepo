@@ -1,0 +1,336 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "project": {
+            "type": "string"
+        },
+        "environment": {
+            "type": "string"
+        },
+        "location": {
+            "type": "string"
+        },
+        "subscriptionId": {
+            "type": "string"
+        },
+        "tenantId": {
+            "type": "string"
+        },
+        "gmailRequestURI": {
+            "type": "string"
+        },
+        "blobRequestURI": {
+            "type": "string"
+        },
+        "storageAccountName":{
+            "type": "string"
+        },
+        "snowRequestURI":{
+            "type": "string"
+        }
+    },
+    "variables": {
+        "resourceTags": {
+            "BusinessUnit": "security",
+            "Classification": "Confidential",
+            "Criticality": "Medium",
+            "OperationsTeam": "SOC/SCT",
+            "environment": "[parameters('environment')]",
+            "project": "[parameters('project')]",
+            "ARM": "true"
+        },
+        "resourceGroup": "[concat('rg', '-', parameters('project'), '-', 'main', '-', parameters('environment'), '-', parameters('location'), '-', '001')]",
+        "logAnalyticsWorkspaceName": "[concat('la', '-', parameters('project'), '-', 'main', '-', parameters('environment'),'-', parameters('location'), '-', '001')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "name": "createApiConnectionAzureSentinel",
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "relativePath": "library/ApiConnections/azuresentinel.json"
+                },
+                "parameters": {
+                    "connections_azuresentinel_name": {
+                        "value": "azuresentinel"
+                    },
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "tenantId": {
+                        "value": "[parameters('tenantId')]"
+                    },
+                    "resourceTags": {
+                        "value": "[variables('resourceTags')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "name": "createApiConnectionAzureMonitorLogs",
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "relativePath": "library/ApiConnections/azuremonitorlogs.json"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "tenantId": {
+                        "value": "[parameters('tenantId')]"
+                    },
+                    "resourceTags": {
+                        "value": "[variables('resourceTags')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "name": "createApiConnectionGmail",
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "relativePath": "library/ApiConnections/gmail.json"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "resourceTags": {
+                        "value": "[variables('resourceTags')]"
+                    },
+                    "gmailRequestURI": {
+                        "value": "[parameters('gmailRequestURI')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "name": "createApiConnectionAzureBlob",
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "relativePath": "library/ApiConnections/azureblob.json"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "resourceTags": {
+                        "value": "[variables('resourceTags')]"
+                    },
+                    "blobRequestURI": {
+                        "value": "[parameters('blobRequestURI')]"
+                    },
+                    "storageAccountName": {
+                        "value": "[parameters('storageAccountName')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "name": "createApiConnectionServiceNow",
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "relativePath": "library/ApiConnections/servicenow.json"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "resourceTags": {
+                        "value": "[variables('resourceTags')]"
+                    },
+                    "snowRequestURI": {
+                        "value": "[parameters('snowRequestURI')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "name": "createLogicAppSecurityEventsEmail",
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "relativePath": "library/LogicApps/logic-app-security-events-email.json"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "resourceGroup": {
+                        "value": "[variables('resourceGroup')]"
+                    },
+                    "logAnalyticsWorkspaceName": {
+                        "value": "[variables('logAnalyticsWorkspaceName')]"
+                    },
+                    "subscriptionId": {
+                        "value": "[parameters('subscriptionId')]"
+                    },
+                    "resourceTags": {
+                        "value": "[variables('resourceTags')]"
+                    }
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionAzureMonitorLogs')]",
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionAzureSentinel')]",
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionGmail')]"
+            ]
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "name": "createLogicAppActivityLogExport",
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "relativePath": "library/LogicApps/logic-app-activity-log-export.json"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "resourceGroup": {
+                        "value": "[variables('resourceGroup')]"
+                    },
+                    "logAnalyticsWorkspaceName": {
+                        "value": "[variables('logAnalyticsWorkspaceName')]"
+                    },
+                    "subscriptionId": {
+                        "value": "[parameters('subscriptionId')]"
+                    },
+                    "resourceTags": {
+                        "value": "[variables('resourceTags')]"
+                    }
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionAzureMonitorLogs')]",
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionAzureBlob')]"
+            ]
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "name": "createLogicAppCheckDiagnosticLogs",
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "relativePath": "library/LogicApps/logic-app-check-diagnostic-logs.json"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "resourceGroup": {
+                        "value": "[variables('resourceGroup')]"
+                    },
+                    "logAnalyticsWorkspaceName": {
+                        "value": "[variables('logAnalyticsWorkspaceName')]"
+                    },
+                    "subscriptionId": {
+                        "value": "[parameters('subscriptionId')]"
+                    },
+                    "resourceTags": {
+                        "value": "[variables('resourceTags')]"
+                    }
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionAzureMonitorLogs')]",
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionGmail')]"
+            ]
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "name": "createLogicAppSecuritySNowTicket",
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "relativePath": "library/LogicApps/logic-app-security-snow-ticket.json"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "resourceGroup": {
+                        "value": "[variables('resourceGroup')]"
+                    },
+                    "logAnalyticsWorkspaceName": {
+                        "value": "[variables('logAnalyticsWorkspaceName')]"
+                    },
+                    "subscriptionId": {
+                        "value": "[parameters('subscriptionId')]"
+                    },
+                    "resourceTags": {
+                        "value": "[variables('resourceTags')]"
+                    }
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionAzureMonitorLogs')]",
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionAzureSentinel')]",
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionServiceNow')]"
+            ]
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "name": "createLogicAppChoreoFwExternalIps",
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "relativePath": "library/LogicApps/logic-app-get-choreo-fw-external-ips.json"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "resourceGroup": {
+                        "value": "[variables('resourceGroup')]"
+                    },
+                    "logAnalyticsWorkspaceName": {
+                        "value": "[variables('logAnalyticsWorkspaceName')]"
+                    },
+                    "subscriptionId": {
+                        "value": "[parameters('subscriptionId')]"
+                    },
+                    "resourceTags": {
+                        "value": "[variables('resourceTags')]"
+                    }
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionAzureMonitorLogs')]",
+                "[resourceId('Microsoft.Resources/deployments', 'createApiConnectionAzureBlob')]"
+            ]
+        }
+    ]
+}

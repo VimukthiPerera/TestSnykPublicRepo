@@ -1,0 +1,52 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "connections_gmail_name": {
+            "defaultValue": "gmail",
+            "type": "string"
+        },
+        "location": {
+            "type": "string"
+        },
+        "resourceTags": {
+            "type": "object"
+        },
+        "gmailRequestURI":{
+            "type": "string"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2018-07-01-preview",
+            "name": "[parameters('connections_gmail_name')]",
+            "location": "[parameters('location')]",
+            "tags": "[parameters('resourceTags')]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[parameters('connections_gmail_name')]",
+                "statuses": [
+                    {
+                        "status": "Connected"
+                    }
+                ],
+                "api": {
+                    "name": "[parameters('connections_gmail_name')]",
+                    "displayName": "Gmail",
+                    "description": "Gmail is a web-based email service from Google. With the Gmail connector, you can perform actions such as send or receive e-mail messages, and trigger flows on new e-mails.",
+                    "iconUri": "[concat('https://connectoricons-prod.azureedge.net/releases/v1.0.1472/1.0.1472.2427/', parameters('connections_gmail_name'), '/icon.png')]",
+                    "brandColor": "#20427f",
+                    "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('location'), parameters('connections_gmail_name'))]",
+                    "type": "Microsoft.Web/locations/managedApis"
+                },
+                "testLinks": [
+                    {
+                        "requestUri": "[concat(parameters('gmailRequestURI'), parameters('connections_gmail_name'), '/extensions/proxy/TestConnection?api-version=2016-06-01')]",
+                        "method": "get"
+                    }
+                ]
+            }
+        }
+    ]
+}

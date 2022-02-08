@@ -1,0 +1,308 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflows_logic_app_security_snow_ticket_name": {
+            "defaultValue": "logic-app-security-snow-ticket",
+            "type": "string"
+        },
+        "connections_azuremonitorlogs_externalid": {
+            "defaultValue": "/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/azuremonitorlogs",
+            "type": "string"
+        },
+        "connections_azuresentinel_externalid": {
+            "defaultValue": "/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/azuresentinel",
+            "type": "string"
+        },
+        "connections_service_now_externalid": {
+            "defaultValue": "/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/service-now",
+            "type": "string"
+        },
+        "location": {
+            "type": "string"
+        },
+        "resourceGroup": {
+            "type": "string"
+        },
+        "logAnalyticsWorkspaceName":{
+            "type": "string"
+        },
+        "subscriptionId":{
+            "type": "string"
+        },
+        "resourceTags": {
+            "type": "object"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2019-05-01",
+            "name": "[parameters('workflows_logic_app_security_snow_ticket_name')]",
+            "location": "[parameters('location')]",
+            "tags": "[parameters('resourceTags')]",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "When_a_response_to_an_Azure_Sentinel_alert_is_triggered": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "path": "/subscribe"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Alert_-_Get_incident": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "method": "get",
+                                "path": "/Incidents/subscriptions/@{encodeURIComponent(triggerBody()?['WorkspaceSubscriptionId'])}/resourceGroups/@{encodeURIComponent(triggerBody()?['WorkspaceResourceGroup'])}/workspaces/@{encodeURIComponent(triggerBody()?['WorkspaceId'])}/alerts/@{encodeURIComponent(triggerBody()?['SystemAlertId'])}"
+                            }
+                        },
+                        "For_each": {
+                            "foreach": "@body('Run_query_and_list_results')?['value']",
+                            "actions": {
+                                "Condition": {
+                                    "actions": {
+                                        "Create_Record": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "body": {
+                                                    "assignment_group": "Security Operations MC",
+                                                    "business_service": "Choreo",
+                                                    "caller_id": "azure-sec-alerts@wso2.com",
+                                                    "impact": "3 - Low",
+                                                    "short_description": "@{items('For_each')?['AlertName']} - @{items('For_each')?['AlertSeverity']}",
+                                                    "urgency": "2 - Medium"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['service-now']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/api/now/v2/table/@{encodeURIComponent('incident')}",
+                                                "queries": {
+                                                    "sysparm_display_value": true,
+                                                    "sysparm_exclude_reference_link": true
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "else": {
+                                        "actions": {
+                                            "Create_Record_2": {
+                                                "type": "ApiConnection",
+                                                "inputs": {
+                                                    "body": {
+                                                        "assignment_group": "Security Operations MC",
+                                                        "business_service": "Asgardeo",
+                                                        "caller_id": "azure-sec-alerts@wso2.com",
+                                                        "impact": "3 - Low",
+                                                        "short_description": "@{items('For_each')?['AlertName']} - @{items('For_each')?['AlertSeverity']}",
+                                                        "urgency": "2 - Medium"
+                                                    },
+                                                    "host": {
+                                                        "connection": {
+                                                            "name": "@parameters('$connections')['service-now']['connectionId']"
+                                                        }
+                                                    },
+                                                    "method": "post",
+                                                    "path": "/api/now/v2/table/@{encodeURIComponent('incident')}",
+                                                    "queries": {
+                                                        "sysparm_display_value": false,
+                                                        "sysparm_exclude_reference_link": true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "expression": {
+                                        "or": [
+                                            {
+                                                "contains": [
+                                                    "@items('For_each')?['GetResouceIDhere']",
+                                                    "CHOREO"
+                                                ]
+                                            },
+                                            {
+                                                "contains": [
+                                                    "@items('For_each')?['ResourceId']",
+                                                    "CHOREO"
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "type": "If"
+                                }
+                            },
+                            "runAfter": {
+                                "Run_query_and_list_results": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Initialize_variable": {
+                            "runAfter": {
+                                "Parse_JSON": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "GetSystemalertID",
+                                        "type": "string",
+                                        "value": "@body('Parse_JSON')?['SystemAlertId']"
+                                    }
+                                ]
+                            }
+                        },
+                        "Parse_JSON": {
+                            "runAfter": {
+                                "Alert_-_Get_incident": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@triggerBody()",
+                                "schema": {
+                                    "properties": {
+                                        "AlertName": {
+                                            "type": "string"
+                                        },
+                                        "AlertSeverity": {
+                                            "type": "string"
+                                        },
+                                        "AlertType": {
+                                            "type": "string"
+                                        },
+                                        "Description": {
+                                            "type": "string"
+                                        },
+                                        "DisplayName": {
+                                            "type": "string"
+                                        },
+                                        "ProcessingEndTime": {
+                                            "type": "string"
+                                        },
+                                        "ProductComponentName": {
+                                            "type": "string"
+                                        },
+                                        "ProductName": {
+                                            "type": "string"
+                                        },
+                                        "Status": {
+                                            "type": "string"
+                                        },
+                                        "SystemAlertId": {
+                                            "type": "string"
+                                        },
+                                        "Tactics": {
+                                            "type": "string"
+                                        },
+                                        "TenantId": {
+                                            "type": "string"
+                                        },
+                                        "TimeGenerated": {
+                                            "type": "string"
+                                        },
+                                        "Type": {
+                                            "type": "string"
+                                        },
+                                        "VendorName": {
+                                            "type": "string"
+                                        },
+                                        "WorkspaceResourceGroup": {
+                                            "type": "string"
+                                        },
+                                        "WorkspaceSubscriptionId": {
+                                            "type": "string"
+                                        },
+                                        "_Internal_WorkspaceResourceId": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "Run_query_and_list_results": {
+                            "runAfter": {
+                                "Initialize_variable": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": "SecurityAlert\n| where SystemAlertId contains \"@{variables('GetSystemalertID')}\"\n| extend GetResouceIDhere = tostring(parse_json(tostring(parse_json(tostring(parse_json(ExtendedProperties).[\"Custom Details\"])).GetResourceID)))\n| project SystemAlertId, AlertName, Description, GetResouceIDhere,ResourceId, AlertSeverity\n",
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuremonitorlogs']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/queryData",
+                                "queries": {
+                                    "resourcegroups": "[parameters('resourceGroup')]",
+                                    "resourcename": "[parameters('logAnalyticsWorkspaceName')]",
+                                    "resourcetype": "Log Analytics Workspace",
+                                    "subscriptions": "[parameters('subscriptionId')]",
+                                    "timerange": "Set in query"
+                                }
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuremonitorlogs": {
+                                "connectionId": "[parameters('connections_azuremonitorlogs_externalid')]",
+                                "connectionName": "azuremonitorlogs",
+                                "id": "/subscriptions/[parameters('subscriptionId')]/providers/Microsoft.Web/locations/[parameters('location')]/managedApis/azuremonitorlogs"
+                            },
+                            "azuresentinel": {
+                                "connectionId": "[parameters('connections_azuresentinel_externalid')]",
+                                "connectionName": "azuresentinel",
+                                "id": "/subscriptions/[parameters('subscriptionId')]/providers/Microsoft.Web/locations/[parameters('location')]/managedApis/azuresentinel"
+                            },
+                            "service-now": {
+                                "connectionId": "[parameters('connections_service_now_externalid')]",
+                                "connectionName": "service-now",
+                                "id": "/subscriptions/[parameters('subscriptionId')]/providers/Microsoft.Web/locations/[parameters('location')]/managedApis/service-now"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

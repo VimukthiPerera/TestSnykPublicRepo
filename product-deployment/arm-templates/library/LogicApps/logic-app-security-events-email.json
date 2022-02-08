@@ -1,0 +1,229 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflows_logic_app_security_events_email_name": {
+            "defaultValue": "logic-app-security-events-email",
+            "type": "string"
+        },
+        "connections_azuremonitorlogs_externalid": {
+            "defaultValue": "/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/azuremonitorlogs",
+            "type": "string"
+        },
+        "connections_azuresentinel_externalid": {
+            "defaultValue": "/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/azuresentinel",
+            "type": "string"
+        },
+        "connections_gmail_externalid": {
+            "defaultValue": "/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/gmail",
+            "type": "string"
+        },
+        "location": {
+            "type": "string"
+        },
+        "resourceGroup": {
+            "type": "string"
+        },
+        "logAnalyticsWorkspaceName":{
+            "type": "string"
+        },
+        "subscriptionId":{
+            "type": "string"
+        },
+        "resourceTags": {
+            "type": "object"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2019-05-01",
+            "name": "[parameters('workflows_logic_app_security_events_email_name')]",
+            "location": "[parameters('location')]",
+            "tags": "[parameters('resourceTags')]",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "When_a_response_to_an_Azure_Sentinel_alert_is_triggered": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "path": "/subscribe"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Alert_-_Get_incident": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "method": "get",
+                                "path": "/Incidents/subscriptions/@{encodeURIComponent(triggerBody()?['WorkspaceSubscriptionId'])}/resourceGroups/@{encodeURIComponent(triggerBody()?['WorkspaceResourceGroup'])}/workspaces/@{encodeURIComponent(triggerBody()?['WorkspaceId'])}/alerts/@{encodeURIComponent(triggerBody()?['SystemAlertId'])}"
+                            }
+                        },
+                        "Delay": {
+                            "runAfter": {
+                                "Initialize_variable": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Wait",
+                            "inputs": {
+                                "interval": {
+                                    "count": 5,
+                                    "unit": "Minute"
+                                }
+                            }
+                        },
+                        "For_each": {
+                            "foreach": "@body('Run_query_and_list_results')?['value']",
+                            "actions": {
+                                "Send_email_(V2)": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "body": {
+                                            "Body": "<p>Hello SOC,<br>\n<br>\nYou have a new Security Incident here,<br>\n<br>\nAlert Name- @{items('For_each')?['AlertName']}<br>\nDescription - @{items('For_each')?['Description']}<br>\n<br>\nResourceID - @{items('For_each')?['GetResouceIDhere']}@{items('For_each')?['ResourceId']}<br>\n<br>\nSystem alert ID- @{items('For_each')?['SystemAlertId']}</p>",
+                                            "Subject": "[SEC-ALERT] @{items('For_each')?['AlertName']}- @{items('For_each')?['AlertSeverity']}",
+                                            "To": "vimukthi@wso2.com"
+                                        },
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['gmail']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "path": "/v2/Mail"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Run_query_and_list_results": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Initialize_variable": {
+                            "runAfter": {
+                                "Parse_JSON": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "getsystemalertid",
+                                        "type": "string",
+                                        "value": "@body('Parse_JSON')?['SystemAlertId']"
+                                    }
+                                ]
+                            }
+                        },
+                        "Parse_JSON": {
+                            "runAfter": {
+                                "Alert_-_Get_incident": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@triggerBody()",
+                                "schema": {
+                                    "properties": {
+                                        "AlertName": {
+                                            "type": "string"
+                                        },
+                                        "SystemAlertId": {
+                                            "type": "string"
+                                        },
+                                        "TimeGenerated": {
+                                            "type": "string"
+                                        },
+                                        "WorkspaceResourceGroup": {
+                                            "type": "string"
+                                        },
+                                        "WorkspaceSubscriptionId": {
+                                            "type": "string"
+                                        },
+                                        "_Internal_WorkspaceResourceId": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "Run_query_and_list_results": {
+                            "runAfter": {
+                                "Delay": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": "SecurityAlert\n| where TimeGenerated > ago(24h)\n| where SystemAlertId == \"@{variables('getsystemalertid')}\"\n| extend GetResouceIDhere = tostring(parse_json(tostring(parse_json(tostring(parse_json(ExtendedProperties).[\"Custom Details\"])).GetResourceID)))\n| project SystemAlertId, AlertName, Description, GetResouceIDhere,ResourceId, AlertSeverity",
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuremonitorlogs']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/queryData",
+                                "queries": {
+                                    "resourcegroups": "[parameters('resourceGroup')]",
+                                    "resourcename": "[parameters('logAnalyticsWorkspaceName')]",
+                                    "resourcetype": "Log Analytics Workspace",
+                                    "subscriptions": "[parameters('subscriptionId')]",
+                                    "timerange": "Set in query"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuremonitorlogs": {
+                                "connectionId": "[parameters('connections_azuremonitorlogs_externalid')]",
+                                "connectionName": "azuremonitorlogs",
+                                "id": "/subscriptions/[parameters('logAnalyticsWorkspaceName')]/providers/Microsoft.Web/locations/eastus2/managedApis/azuremonitorlogs"
+                            },
+                            "azuresentinel": {
+                                "connectionId": "[parameters('connections_azuresentinel_externalid')]",
+                                "connectionName": "azuresentinel",
+                                "id": "/subscriptions/[parameters('logAnalyticsWorkspaceName')]/providers/Microsoft.Web/locations/eastus2/managedApis/azuresentinel"
+                            },
+                            "gmail": {
+                                "connectionId": "[parameters('connections_gmail_externalid')]",
+                                "connectionName": "gmail",
+                                "id": "/subscriptions/[parameters('logAnalyticsWorkspaceName')]/providers/Microsoft.Web/locations/eastus2/managedApis/gmail"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

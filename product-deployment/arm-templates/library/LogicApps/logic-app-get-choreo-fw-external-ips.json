@@ -1,0 +1,162 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflows_logic_app_get_choreo_fw_external_ips_name": {
+            "defaultValue": "logic-app-get-choreo-fw-external-ips",
+            "type": "string"
+        },
+        "connections_azureblob_externalid": {
+            "defaultValue": "/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/azureblob",
+            "type": "string"
+        },
+        "connections_azuremonitorlogs_externalid": {
+            "defaultValue": "/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/azuremonitorlogs",
+            "type": "string"
+        },
+        "location": {
+            "type": "string"
+        },
+        "resourceGroup": {
+            "type": "string"
+        },
+        "logAnalyticsWorkspaceName": {
+            "type": "string"
+        },
+        "subscriptionId": {
+            "type": "string"
+        },
+        "resourceTags": {
+            "type": "object"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2019-05-01",
+            "name": "[parameters('workflows_logic_app_get_choreo_fw_external_ips_name')]",
+            "location": "[parameters('location')]",
+            "tags": "[parameters('resourceTags')]",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Day",
+                                "interval": 1,
+                                "startTime": "2020-07-01T00:00:00Z"
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "Create_blob": {
+                            "runAfter": {
+                                "Parse_JSON": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": "@body('Parse_JSON')",
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azureblob']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/datasets/default/files",
+                                "queries": {
+                                    "folderPath": "/getchoreofwexternalips",
+                                    "name": "user-access-info.json",
+                                    "queryParametersSingleEncoded": true
+                                }
+                            },
+                            "runtimeConfiguration": {
+                                "contentTransfer": {
+                                    "transferMode": "Chunked"
+                                }
+                            }
+                        },
+                        "Parse_JSON": {
+                            "runAfter": {
+                                "Run_query_and_list_results": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@body('Run_query_and_list_results')?['value']",
+                                "schema": {
+                                    "items": {
+                                        "properties": {
+                                            "SourceIP": {
+                                                "type": "string"
+                                            },
+                                            "count_": {
+                                                "type": "integer"
+                                            }
+                                        },
+                                        "required": [
+                                            "SourceIP",
+                                            "count_"
+                                        ],
+                                        "type": "object"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "Run_query_and_list_results": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": "AzureDiagnostics\n| where TimeGenerated > ago(24h)\n| where Category == \"AzureFirewallNetworkRule\"\n| where OperationName == \"AzureFirewallNatRuleLog\" or OperationName == \"AzureFirewallNetworkRuleLog\"\n| parse msg_s with Protocol \" request from \" SourceIP \":\" SourcePortInt:int \" to \" TargetIP \":\" TargetPortInt:int *\n| parse kind=regex flags=U msg_s with * \". Action\\\\: \" Action1a \"\\\\.\"\n//TCP request from IP:PORT to IP:PORT was DNAT'ed to IP:PORT\n| parse msg_s with * \" was \" Action1b:string \" to \" TranslatedDestination:string \":\" TranslatedPort:int *\n//Parse rule data if present\n| parse msg_s with * \". Policy: \" Policy \". Rule Collection Group: \" RuleCollectionGroup \".\" *\n| parse msg_s with * \" Rule Collection: \"  RuleCollection \". Rule: \" Rule \n| parse msg_s with Protocol2 \" request from \" SourceIP2 \" to \" TargetIP2 \". Action: \" Action2\n| extend\nSourcePort = tostring(SourcePortInt),\nTargetPort = tostring(TargetPortInt)\n| extend \n    Action = case(Action1a == \"\", case(Action1b == \"\",Action2,Action1b), split(Action1a,\".\")[0]),\n    Protocol = case(Protocol == \"\", Protocol2, Protocol),\n    SourceIP = case(SourceIP == \"\", SourceIP2, SourceIP),\n    TargetIP = case(TargetIP == \"\", TargetIP2, TargetIP),\n    //ICMP records don't have port information\n    SourcePort = case(SourcePort == \"\", \"N/A\", SourcePort),\n    TargetPort = case(TargetPort == \"\", \"N/A\", TargetPort),\n    //Regular network rules don't have a DNAT destination\n    TranslatedDestination = case(TranslatedDestination == \"\", \"N/A\", TranslatedDestination), \n    TranslatedPort = case(isnull(TranslatedPort), \"N/A\", tostring(TranslatedPort)),\n    //Rule information\n    Policy = case(Policy == \"\", \"N/A\", Policy),\n    RuleCollectionGroup = case(RuleCollectionGroup == \"\", \"N/A\", RuleCollectionGroup ),\n    RuleCollection = case(RuleCollection == \"\", \"N/A\", RuleCollection ),\n    Rule = case(Rule == \"\", \"N/A\", Rule)\n| project TimeGenerated, msg_s, Protocol, SourceIP,SourcePort,TargetIP,TargetPort,Action, TranslatedDestination, TranslatedPort, Policy, RuleCollectionGroup, RuleCollection, Rule\n| where (TargetIP ==\"20.94.98.17\" or TargetIP == \"20.94.98.18\" or TargetIP == \"20.94.98.19\")\n| where TargetPort == \"443\"\n//| where SourceIP !contains \"172.16\"\n| summarize count() by SourceIP\n| order by count_",
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuremonitorlogs']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/queryData",
+                                "queries": {
+                                    "resourcegroups": "[parameters('resourceGroup')]",
+                                    "resourcename": "[parameters('logAnalyticsWorkspaceName')]",
+                                    "resourcetype": "Log Analytics Workspace",
+                                    "subscriptions": "[parameters('subscriptionId')]",
+                                    "timerange": "Set in query"
+                                }
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azureblob_1": {
+                                "connectionId": "[parameters('connections_azureblob_externalid')]",
+                                "connectionName": "azureblob",
+                                "id": "/subscriptions/[parameters('subscriptionId')]/providers/Microsoft.Web/locations/[parameters('location')]/managedApis/azureblob"
+                            },
+                            "azuremonitorlogs": {
+                                "connectionId": "[parameters('connections_azuremonitorlogs_externalid')]",
+                                "connectionName": "azuremonitorlogs",
+                                "id": "/subscriptions/[parameters('subscriptionId')]/providers/Microsoft.Web/locations/[parameters('location')]/managedApis/azuremonitorlogs"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

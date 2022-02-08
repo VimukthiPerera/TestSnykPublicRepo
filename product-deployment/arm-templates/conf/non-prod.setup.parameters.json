@@ -1,0 +1,33 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "project": {
+            "value": "security"
+        },
+        "environment": {
+            "value": "non-prod"
+        },
+        "location": {
+            "value": "eastus2"
+        },
+        "subscriptionId":{
+            "value": "7b001248-55ca-476d-8f00-7d0450a72391"
+        },
+        "tenantId": {
+            "value": "da76d684-740f-4d94-8717-9d5fb21dd1f9"
+        },
+        "gmailRequestURI": {
+            "value": "https://management.azure.com:443/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/"
+        },
+        "blobRequestURI": {
+            "value": "https://management.azure.com:443/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/"
+        },
+        "storageAccountName": {
+            "value": "stsecsntldenpeus201"
+        },
+        "snowRequestURI": {
+            "value": "https://management.azure.com:443/subscriptions/7b001248-55ca-476d-8f00-7d0450a72391/resourceGroups/rg-security-main-non-prod-eastus2-001/providers/Microsoft.Web/connections/"
+        }
+    }
+}
