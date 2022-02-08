@@ -15,6 +15,12 @@ jobs:
       SUPER_LINTER_VERSION: v4
     displayName: 'Scan WSO2 Terraform static code'
     steps:
+      - task: SnykSecurityScan@1
+        inputs:
+          serviceConnectionEndpoint: 'snyk'
+          testType: 'app'
+          monitorWhen: 'always'
+          failOnIssues: true
       - script: |
           docker pull github/super-linter:$(SUPER_LINTER_VERSION)
           docker run -e RUN_LOCAL=true -e VALIDATE_MD=true -e VALIDATE_YAML=true -e VALIDATE_BASH=true \
